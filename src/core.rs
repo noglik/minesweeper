@@ -40,6 +40,7 @@ pub struct Game {
     height: usize,
     mine_positions: HashSet<Position>,
     open_positions: HashSet<Position>,
+    flag_positions: HashSet<Position>,
     status: Status,
 }
 
@@ -50,11 +51,12 @@ impl Game {
             height,
             mine_positions: HashSet::new(),
             open_positions: HashSet::new(),
+            flag_positions: HashSet::new(),
             status: Status::Configuration,
         }
     }
 
-    fn set_mine_position(&mut self, position: Position) -> Result<(), GameError> {
+    fn mine(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::Configuration {
             return Err(GameError::IncorrectStatus(
                 self.status,
@@ -85,11 +87,26 @@ impl Game {
 
         if self.mine_positions.contains(&position) {
             self.status = Status::Lost;
-        } else {
-            self.open_positions.insert(position);
+            return Ok(());
         }
 
-        if self.open_positions.len() + self.mine_positions.len() == self.width * self.height {
+        self.open_positions.insert(position);
+
+        if self.open_positions.len() + self.flag_positions.len() == self.width * self.height {
+            self.status = Status::Won;
+        }
+
+        Ok(())
+    }
+
+    fn flag(&mut self, position: Position) -> Result<(), GameError> {
+        if self.status != Status::InProgress {
+            return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
+        }
+
+        self.flag_positions.insert(position);
+
+        if self.open_positions.len() + self.flag_positions.len() == self.width * self.height {
             self.status = Status::Won;
         }
 
@@ -98,7 +115,7 @@ impl Game {
 }
 
 #[cfg(test)]
-mod tests {
+mod game_new {
     use super::*;
 
     #[test]
@@ -109,8 +126,14 @@ mod tests {
         assert_eq!(game.height, 100);
         assert_eq!(game.mine_positions.len(), 0);
         assert_eq!(game.open_positions.len(), 0);
+        assert_eq!(game.flag_positions.len(), 0);
         assert_eq!(game.status, Status::Configuration);
     }
+}
+
+#[cfg(test)]
+mod game_mine {
+    use super::*;
 
     #[test]
     fn set_mine_in_fresh_game() {
@@ -118,7 +141,7 @@ mod tests {
 
         let mine_position = Position(1, 1);
 
-        game.set_mine_position(mine_position).expect("Set mine");
+        game.mine(mine_position).expect("Set mine");
 
         assert!(game.mine_positions.contains(&mine_position));
     }
@@ -130,13 +153,18 @@ mod tests {
         game.start().expect("Game started");
 
         assert_eq!(
-            game.set_mine_position(Position(1, 1)),
+            game.mine(Position(1, 1)),
             Err(GameError::IncorrectStatus(
                 Status::InProgress,
                 Status::Configuration
             ))
         );
     }
+}
+
+#[cfg(test)]
+mod game_start {
+    use super::*;
 
     #[test]
     fn start_fresh_game() {
@@ -161,6 +189,11 @@ mod tests {
             ))
         );
     }
+}
+
+#[cfg(test)]
+mod game_open {
+    use super::*;
 
     #[test]
     fn open_in_config_game() {
@@ -182,7 +215,7 @@ mod tests {
         let mine_position = Position(1, 1);
         let safe_position = Position(1, 2);
 
-        game.set_mine_position(mine_position).expect("Set mine");
+        game.mine(mine_position).expect("Set mine");
         game.start().expect("Game started");
 
         game.open(safe_position).expect("Position opened");
@@ -197,7 +230,7 @@ mod tests {
 
         let mine_position = Position(1, 1);
 
-        game.set_mine_position(mine_position).expect("Set mine");
+        game.mine(mine_position).expect("Set mine");
         game.start().expect("Game started");
 
         game.open(mine_position).expect("Position opened");
@@ -205,15 +238,60 @@ mod tests {
         assert_eq!(game.status, Status::Lost);
     }
 
+    fn win_game() {
+        let mut game = Game::new(1, 2);
+
+        game.mine(Position(1, 2)).expect("Set mine");
+
+        game.start().expect("Game started");
+
+        game.flag(Position(1, 1)).expect("Position flagged");
+        game.open(Position(1, 2)).expect("Position opened");
+
+        assert!(matches!(game.status, Status::Won));
+    }
+}
+
+#[cfg(test)]
+mod game_flag {
+    use super::*;
+
+    #[test]
+    fn flag_position() {
+        let mut game = Game::new(10, 10);
+
+        let flag_position = Position(1, 1);
+
+        game.start().expect("Game started");
+
+        game.flag(flag_position).expect("Position flagged");
+
+        assert!(game.flag_positions.contains(&flag_position));
+    }
+
+    #[test]
+    fn flag_before_start() {
+        let mut game = Game::new(10, 10);
+
+        assert_eq!(
+            game.flag(Position(1, 1)),
+            Err(GameError::IncorrectStatus(
+                Status::Configuration,
+                Status::InProgress
+            ))
+        );
+    }
+
     #[test]
     fn win_game() {
         let mut game = Game::new(1, 2);
 
-        game.set_mine_position(Position(1, 2)).expect("Set mine");
+        game.mine(Position(1, 2)).expect("Set mine");
 
         game.start().expect("Game started");
 
         game.open(Position(1, 1)).expect("Position opened");
+        game.flag(Position(1, 2)).expect("Position flagged");
 
         assert!(matches!(game.status, Status::Won));
     }
