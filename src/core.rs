@@ -4,6 +4,9 @@ use std::collections::HashSet;
 #[derive(Debug, PartialEq, Eq)]
 enum GameError {
     IncorrectStatus(Status, Status),
+    AlreadyMined,
+    AlreadyOpened,
+    AlreadyFlagged,
 }
 
 impl fmt::Display for GameError {
@@ -14,6 +17,9 @@ impl fmt::Display for GameError {
                 "game in status {:?}, but should be in {:?}",
                 given_status, corr_status
             ),
+            GameError::AlreadyMined => write!(f, "position already have mine"),
+            GameError::AlreadyOpened => write!(f, "position already opened"),
+            GameError::AlreadyFlagged => write!(f, "position already have flag"),
         }
     }
 }
@@ -28,7 +34,7 @@ enum Status {
 
 impl fmt::Debug for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "test")
     }
 }
 
@@ -64,6 +70,10 @@ impl Game {
             ));
         }
 
+        if self.mine_positions.contains(&position) {
+            return Err(GameError::AlreadyMined);
+        }
+
         self.mine_positions.insert(position);
         Ok(())
     }
@@ -85,6 +95,14 @@ impl Game {
             return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
         }
 
+        if self.open_positions.contains(&position) {
+            return Err(GameError::AlreadyOpened);
+        }
+
+        if self.flag_positions.contains(&position) {
+            self.flag_positions.remove(&position);
+        }
+
         if self.mine_positions.contains(&position) {
             self.status = Status::Lost;
             return Ok(());
@@ -99,9 +117,18 @@ impl Game {
         Ok(())
     }
 
+    // TODO: add ability to open flagged positions
     fn flag(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::InProgress {
             return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
+        }
+
+        if self.open_positions.contains(&position) {
+            return Err(GameError::AlreadyOpened);
+        }
+
+        if self.flag_positions.contains(&position) {
+            return Err(GameError::AlreadyFlagged);
         }
 
         self.flag_positions.insert(position);
@@ -159,6 +186,16 @@ mod game_mine {
                 Status::Configuration
             ))
         );
+    }
+
+    #[test]
+    fn set_mine_twice() {
+        let mut game = Game::new(10, 10);
+
+        let mine_position = Position(1, 1);
+
+        game.mine(mine_position).expect("Set mine");
+        assert_eq!(game.mine(mine_position), Err(GameError::AlreadyMined));
     }
 }
 
@@ -238,10 +275,37 @@ mod game_open {
         assert_eq!(game.status, Status::Lost);
     }
 
+    #[test]
+    fn open_safe_position_twice() {
+        let mut game = Game::new(10, 10);
+
+        let open = Position(1, 2);
+
+        game.start().expect("Game started");
+
+        game.open(open).expect("Position opened");
+
+        assert_eq!(game.open(open), Err(GameError::AlreadyOpened));
+    }
+
+    #[test]
+    fn open_flagged_position() {
+        let mut game = Game::new(10, 10);
+
+        let flag = Position(1, 2);
+
+        game.start().expect("Game started");
+
+        game.flag(flag).expect("Position flagged");
+        game.open(flag).expect("Position opened");
+
+        assert_eq!(game.flag_positions.contains(&flag), false);
+        assert!(game.open_positions.contains(&flag));
+    }
+
+    #[test]
     fn win_game() {
         let mut game = Game::new(1, 2);
-
-        game.mine(Position(1, 2)).expect("Set mine");
 
         game.start().expect("Game started");
 
@@ -280,6 +344,32 @@ mod game_flag {
                 Status::InProgress
             ))
         );
+    }
+
+    #[test]
+    fn flag_position_twice() {
+        let mut game = Game::new(10, 10);
+
+        let flag_position = Position(1, 1);
+
+        game.start().expect("Game started");
+
+        game.flag(flag_position).expect("Position flagged");
+
+        assert_eq!(game.flag(flag_position), Err(GameError::AlreadyFlagged));
+    }
+
+    #[test]
+    fn flag_open_position() {
+        let mut game = Game::new(10, 10);
+
+        let open = Position(1, 1);
+
+        game.start().expect("Game started");
+
+        game.open(open).expect("Position opened");
+
+        assert_eq!(game.flag(open), Err(GameError::AlreadyOpened));
     }
 
     #[test]
