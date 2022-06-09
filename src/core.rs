@@ -89,6 +89,10 @@ impl Game {
             self.open_positions.insert(position);
         }
 
+        if self.open_positions.len() + self.mine_positions.len() == self.width * self.height {
+            self.status = Status::Won;
+        }
+
         Ok(())
     }
 }
@@ -199,5 +203,18 @@ mod tests {
         game.open(mine_position).expect("Position opened");
 
         assert_eq!(game.status, Status::Lost);
+    }
+
+    #[test]
+    fn win_game() {
+        let mut game = Game::new(1, 2);
+
+        game.set_mine_position(Position(1, 2)).expect("Set mine");
+
+        game.start().expect("Game started");
+
+        game.open(Position(1, 1)).expect("Position opened");
+
+        assert!(matches!(game.status, Status::Won));
     }
 }
