@@ -4,6 +4,7 @@ use std::collections::HashSet;
 #[derive(Debug, PartialEq, Eq)]
 enum GameError {
     IncorrectStatus(Status, Status),
+    OutOfBounds,
     AlreadyMined,
     AlreadyOpened,
     AlreadyFlagged,
@@ -17,6 +18,7 @@ impl fmt::Display for GameError {
                 "game in status {:?}, but should be in {:?}",
                 given_status, corr_status
             ),
+            GameError::OutOfBounds => write!(f, "position out of bounds"),
             GameError::AlreadyMined => write!(f, "position already have mine"),
             GameError::AlreadyOpened => write!(f, "position already opened"),
             GameError::AlreadyFlagged => write!(f, "position already have flag"),
@@ -62,12 +64,27 @@ impl Game {
         }
     }
 
+    fn is_in_bounds(&self, position: &Position) -> bool {
+        if position.0 > self.width {
+            return false;
+        }
+        if position.1 > self.height {
+            return false;
+        }
+
+        true
+    }
+
     fn mine(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::Configuration {
             return Err(GameError::IncorrectStatus(
                 self.status,
                 Status::Configuration,
             ));
+        }
+
+        if !self.is_in_bounds(&position) {
+            return Err(GameError::OutOfBounds);
         }
 
         if self.mine_positions.contains(&position) {
@@ -93,6 +110,10 @@ impl Game {
     fn open(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::InProgress {
             return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
+        }
+
+        if !self.is_in_bounds(&position) {
+            return Err(GameError::OutOfBounds);
         }
 
         if self.open_positions.contains(&position) {
@@ -121,6 +142,10 @@ impl Game {
     fn flag(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::InProgress {
             return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
+        }
+
+        if !self.is_in_bounds(&position) {
+            return Err(GameError::OutOfBounds);
         }
 
         if self.open_positions.contains(&position) {
@@ -155,6 +180,25 @@ mod game_new {
         assert_eq!(game.open_positions.len(), 0);
         assert_eq!(game.flag_positions.len(), 0);
         assert_eq!(game.status, Status::Configuration);
+    }
+}
+
+#[cfg(test)]
+mod game_is_in_bounds {
+    use super::*;
+
+    #[test]
+    fn in_bounds() {
+        let game = Game::new(10, 10);
+
+        assert!(game.is_in_bounds(&Position(1, 1)));
+    }
+
+    #[test]
+    fn out_of_bounds() {
+        let game = Game::new(10, 10);
+
+        assert_eq!(game.is_in_bounds(&Position(100, 1)), false);
     }
 }
 
@@ -196,6 +240,13 @@ mod game_mine {
 
         game.mine(mine_position).expect("Set mine");
         assert_eq!(game.mine(mine_position), Err(GameError::AlreadyMined));
+    }
+
+    #[test]
+    fn set_mine_out_of_bounds() {
+        let mut game = Game::new(10, 10);
+
+        assert_eq!(game.mine(Position(20, 5)), Err(GameError::OutOfBounds));
     }
 }
 
@@ -304,6 +355,14 @@ mod game_open {
     }
 
     #[test]
+    fn out_of_bounds() {
+        let mut game = Game::new(10, 10);
+        game.start().expect("Game started");
+
+        assert_eq!(game.open(Position(11, 10)), Err(GameError::OutOfBounds));
+    }
+
+    #[test]
     fn win_game() {
         let mut game = Game::new(1, 2);
 
@@ -370,6 +429,15 @@ mod game_flag {
         game.open(open).expect("Position opened");
 
         assert_eq!(game.flag(open), Err(GameError::AlreadyOpened));
+    }
+
+    #[test]
+    fn out_of_bounds() {
+        let mut game = Game::new(10, 10);
+
+        game.start().expect("Game started");
+
+        assert_eq!(game.flag(Position(12, 8)), Err(GameError::OutOfBounds));
     }
 
     #[test]
