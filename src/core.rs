@@ -4,6 +4,7 @@ use std::collections::HashSet;
 #[derive(Debug, PartialEq, Eq)]
 enum GameError {
     IncorrectStatus(Status, Status),
+    ZeroFieldArea,
     OutOfBounds,
     AlreadyMined,
     AlreadyOpened,
@@ -22,6 +23,7 @@ impl fmt::Display for GameError {
             GameError::AlreadyMined => write!(f, "position already have mine"),
             GameError::AlreadyOpened => write!(f, "position already opened"),
             GameError::AlreadyFlagged => write!(f, "position already have flag"),
+            GameError::ZeroFieldArea => write!(f, "field area is zero"),
         }
     }
 }
@@ -53,22 +55,26 @@ pub struct Game {
 }
 
 impl Game {
-    fn new(width: usize, height: usize) -> Game {
-        Game {
+    fn new(width: usize, height: usize) -> Result<Game, GameError> {
+        if width == 0 || height == 0 {
+            return Err(GameError::ZeroFieldArea);
+        }
+
+        Ok(Game {
             width,
             height,
             mine_positions: HashSet::new(),
             open_positions: HashSet::new(),
             flag_positions: HashSet::new(),
             status: Status::Configuration,
-        }
+        })
     }
 
     fn is_in_bounds(&self, position: &Position) -> bool {
-        if position.0 > self.width {
+        if position.0 > self.width - 1 {
             return false;
         }
-        if position.1 > self.height {
+        if position.1 > self.height - 1 {
             return false;
         }
 
@@ -138,7 +144,6 @@ impl Game {
         Ok(())
     }
 
-    // TODO: add ability to open flagged positions
     fn flag(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::InProgress {
             return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
@@ -172,7 +177,7 @@ mod game_new {
 
     #[test]
     fn create_new_game() {
-        let game = Game::new(100, 100);
+        let game = Game::new(100, 100).expect("game created");
 
         assert_eq!(game.width, 100);
         assert_eq!(game.height, 100);
@@ -180,6 +185,11 @@ mod game_new {
         assert_eq!(game.open_positions.len(), 0);
         assert_eq!(game.flag_positions.len(), 0);
         assert_eq!(game.status, Status::Configuration);
+    }
+
+    #[test]
+    fn zero_area() {
+        assert!(matches!(Game::new(0, 1), Err(GameError::ZeroFieldArea)));
     }
 }
 
@@ -189,14 +199,14 @@ mod game_is_in_bounds {
 
     #[test]
     fn in_bounds() {
-        let game = Game::new(10, 10);
+        let game = Game::new(10, 10).expect("game created");
 
         assert!(game.is_in_bounds(&Position(1, 1)));
     }
 
     #[test]
     fn out_of_bounds() {
-        let game = Game::new(10, 10);
+        let game = Game::new(10, 10).expect("game created");
 
         assert_eq!(game.is_in_bounds(&Position(100, 1)), false);
     }
@@ -208,7 +218,7 @@ mod game_mine {
 
     #[test]
     fn set_mine_in_fresh_game() {
-        let mut game = Game::new(100, 100);
+        let mut game = Game::new(100, 100).expect("game created");
 
         let mine_position = Position(1, 1);
 
@@ -219,7 +229,7 @@ mod game_mine {
 
     #[test]
     fn set_mine_in_progress_game() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         game.start().expect("Game started");
 
@@ -234,7 +244,7 @@ mod game_mine {
 
     #[test]
     fn set_mine_twice() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let mine_position = Position(1, 1);
 
@@ -244,7 +254,7 @@ mod game_mine {
 
     #[test]
     fn set_mine_out_of_bounds() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         assert_eq!(game.mine(Position(20, 5)), Err(GameError::OutOfBounds));
     }
@@ -256,7 +266,7 @@ mod game_start {
 
     #[test]
     fn start_fresh_game() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         game.start().expect("Game started");
 
@@ -265,7 +275,7 @@ mod game_start {
 
     #[test]
     fn start_already_started_game() {
-        let mut game = Game::new(1, 1);
+        let mut game = Game::new(1, 1).expect("game created");
 
         game.start().expect("Game started");
 
@@ -285,7 +295,7 @@ mod game_open {
 
     #[test]
     fn open_in_config_game() {
-        let mut game = Game::new(1, 1);
+        let mut game = Game::new(1, 1).expect("game created");
 
         assert_eq!(
             game.open(Position(1, 1)),
@@ -298,7 +308,7 @@ mod game_open {
 
     #[test]
     fn open_safe_position() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let mine_position = Position(1, 1);
         let safe_position = Position(1, 2);
@@ -314,7 +324,7 @@ mod game_open {
 
     #[test]
     fn open_mine_position() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let mine_position = Position(1, 1);
 
@@ -328,7 +338,7 @@ mod game_open {
 
     #[test]
     fn open_safe_position_twice() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let open = Position(1, 2);
 
@@ -341,7 +351,7 @@ mod game_open {
 
     #[test]
     fn open_flagged_position() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let flag = Position(1, 2);
 
@@ -356,7 +366,7 @@ mod game_open {
 
     #[test]
     fn out_of_bounds() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
         game.start().expect("Game started");
 
         assert_eq!(game.open(Position(11, 10)), Err(GameError::OutOfBounds));
@@ -364,12 +374,12 @@ mod game_open {
 
     #[test]
     fn win_game() {
-        let mut game = Game::new(1, 2);
+        let mut game = Game::new(1, 2).expect("game created");
 
         game.start().expect("Game started");
 
-        game.flag(Position(1, 1)).expect("Position flagged");
-        game.open(Position(1, 2)).expect("Position opened");
+        game.flag(Position(0, 0)).expect("Position flagged");
+        game.open(Position(0, 1)).expect("Position opened");
 
         assert!(matches!(game.status, Status::Won));
     }
@@ -381,7 +391,7 @@ mod game_flag {
 
     #[test]
     fn flag_position() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let flag_position = Position(1, 1);
 
@@ -394,7 +404,7 @@ mod game_flag {
 
     #[test]
     fn flag_before_start() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         assert_eq!(
             game.flag(Position(1, 1)),
@@ -407,7 +417,7 @@ mod game_flag {
 
     #[test]
     fn flag_position_twice() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let flag_position = Position(1, 1);
 
@@ -420,7 +430,7 @@ mod game_flag {
 
     #[test]
     fn flag_open_position() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         let open = Position(1, 1);
 
@@ -433,7 +443,7 @@ mod game_flag {
 
     #[test]
     fn out_of_bounds() {
-        let mut game = Game::new(10, 10);
+        let mut game = Game::new(10, 10).expect("game created");
 
         game.start().expect("Game started");
 
@@ -442,14 +452,16 @@ mod game_flag {
 
     #[test]
     fn win_game() {
-        let mut game = Game::new(1, 2);
+        let mut game = Game::new(1, 2).expect("game created");
 
-        game.mine(Position(1, 2)).expect("Set mine");
+        let mine = Position(0, 1);
+
+        game.mine(mine).expect("Set mine");
 
         game.start().expect("Game started");
 
-        game.open(Position(1, 1)).expect("Position opened");
-        game.flag(Position(1, 2)).expect("Position flagged");
+        game.open(Position(0, 0)).expect("Position opened");
+        game.flag(mine).expect("Position flagged");
 
         assert!(matches!(game.status, Status::Won));
     }
