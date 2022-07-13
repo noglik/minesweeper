@@ -51,19 +51,15 @@ impl Position {
         let y: Option<usize>;
 
         if x_dif.is_negative() {
-            x = self
-                .0
-                .checked_sub(
-                    x_dif
-                        .checked_neg()
-                        .unwrap_or(0isize)
-                        .try_into()
-                        .unwrap_or(usize::MIN),
-                );
+            x = self.0.checked_sub(
+                x_dif
+                    .checked_neg()
+                    .unwrap_or(0isize)
+                    .try_into()
+                    .unwrap_or(usize::MIN),
+            );
         } else {
-            x = self
-                .0
-                .checked_add(x_dif.try_into().unwrap_or(usize::MAX));
+            x = self.0.checked_add(x_dif.try_into().unwrap_or(usize::MAX));
         }
 
         if x.is_none() {
@@ -71,19 +67,15 @@ impl Position {
         }
 
         if y_dif.is_negative() {
-            y = self
-                .1
-                .checked_sub(
-                    y_dif
-                        .checked_neg()
-                        .unwrap_or(0isize)
-                        .try_into()
-                        .unwrap_or(usize::MIN),
-                );
+            y = self.1.checked_sub(
+                y_dif
+                    .checked_neg()
+                    .unwrap_or(0isize)
+                    .try_into()
+                    .unwrap_or(usize::MIN),
+            );
         } else {
-            y = self
-                .1
-                .checked_add(y_dif.try_into().unwrap_or(usize::MAX));
+            y = self.1.checked_add(y_dif.try_into().unwrap_or(usize::MAX));
         }
 
         if y.is_none() {
@@ -218,6 +210,45 @@ impl Game {
 
         Ok(())
     }
+
+    fn check_proximity(&self, position: Position) -> Result<u8, GameError> {
+        if self.status != Status::InProgress {
+            return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
+        }
+
+        if !self.is_in_bounds(&position) {
+            return Err(GameError::OutOfBounds);
+        }
+
+        let mut mine_proximity_counter: u8 = 0;
+
+        // TODO: think of better way of getting neigbour relative coordinates
+        let relative_coordinates: Vec<(i8, i8)> = vec![
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ];
+
+        for (x_dif, y_dif) in relative_coordinates.iter() {
+            match position.get_relative((*x_dif).into(), (*y_dif).into()) {
+                Ok(neighbour) => {
+                    if self.is_in_bounds(&neighbour) && self.mine_positions.contains(&neighbour) {
+                        mine_proximity_counter += 1;
+                    }
+                },
+                // don't expect to happen, dif values are too small
+                Err(_) => (),
+            }
+
+        }
+
+        Ok(mine_proximity_counter)
+    }
 }
 
 #[cfg(test)]
@@ -226,20 +257,22 @@ mod position_get_relative {
 
     #[test]
     fn get_relative_with_negative() {
-        assert_eq!(Position(2,2).get_relative(-1, -1), Ok(Position(1,1)));
+        assert_eq!(Position(2, 2).get_relative(-1, -1), Ok(Position(1, 1)));
     }
 
     #[test]
     fn get_relative_with_positive() {
-        assert_eq!(Position(2,2).get_relative(1, 1), Ok(Position(3,3)));
+        assert_eq!(Position(2, 2).get_relative(1, 1), Ok(Position(3, 3)));
     }
 
     #[test]
     fn get_relative_with_oob_negative() {
-        assert_eq!(Position(2,2).get_relative(-100, -100), Err(GameError::OutOfBounds));
+        assert_eq!(
+            Position(2, 2).get_relative(-100, -100),
+            Err(GameError::OutOfBounds)
+        );
     }
 }
-
 
 #[cfg(test)]
 mod game_new {
@@ -534,5 +567,44 @@ mod game_flag {
         game.flag(mine).expect("Position flagged");
 
         assert!(matches!(game.status, Status::Won));
+    }
+}
+
+#[cfg(test)]
+mod game_check_proximity {
+    use super::*;
+
+    #[test]
+    fn zero_mines() {
+        let mut game = Game::new(5, 5).expect("game created");
+
+        game.start().expect("game started");
+
+        assert_eq!(game.check_proximity(Position(3,3)), Ok(0));
+    }
+
+    #[test]
+    fn some_mines() {
+        let mut game = Game::new(5, 5).expect("game created");
+
+        game.mine(Position(2, 3)).expect("Set mine");
+        game.mine(Position(4, 4)).expect("Set mine");
+
+        game.start().expect("game started");
+
+        assert_eq!(game.check_proximity(Position(3, 3)), Ok(2));
+    }
+
+    #[test]
+    fn border_position() {
+        let mut game = Game::new(5, 5).expect("game created");
+
+        game.mine(Position(0, 2)).expect("Set mine");
+        game.mine(Position(1, 3)).expect("Set mine");
+        game.mine(Position(0, 4)).expect("Set mine");
+
+        game.start().expect("game started");
+
+        assert_eq!(game.check_proximity(Position(0, 3)), Ok(3));
     }
 }
