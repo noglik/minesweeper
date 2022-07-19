@@ -1,102 +1,20 @@
-use core::fmt;
 use std::collections::HashSet;
 
-#[derive(Debug, PartialEq, Eq)]
-enum GameError {
-    IncorrectStatus(Status, Status),
-    ZeroFieldArea,
-    OutOfBounds,
-    AlreadyMined,
-    AlreadyOpened,
-    AlreadyFlagged,
-}
-
-impl fmt::Display for GameError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            GameError::IncorrectStatus(given_status, corr_status) => write!(
-                f,
-                "game in status {:?}, but should be in {:?}",
-                given_status, corr_status
-            ),
-            GameError::OutOfBounds => write!(f, "position out of bounds"),
-            GameError::AlreadyMined => write!(f, "position already have mine"),
-            GameError::AlreadyOpened => write!(f, "position already opened"),
-            GameError::AlreadyFlagged => write!(f, "position already have flag"),
-            GameError::ZeroFieldArea => write!(f, "field area is zero"),
-        }
-    }
-}
-
-#[derive(PartialEq, Copy, Clone, Eq)]
-enum Status {
-    Configuration,
-    InProgress,
-    Won,
-    Lost,
-}
-
-impl fmt::Debug for Status {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "test")
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct Position(usize, usize);
-
-impl Position {
-    fn get_relative(&self, x_dif: isize, y_dif: isize) -> Result<Position, GameError> {
-        let x: Option<usize>;
-        let y: Option<usize>;
-
-        if x_dif.is_negative() {
-            x = self.0.checked_sub(
-                x_dif
-                    .checked_neg()
-                    .unwrap_or(0isize)
-                    .try_into()
-                    .unwrap_or(usize::MIN),
-            );
-        } else {
-            x = self.0.checked_add(x_dif.try_into().unwrap_or(usize::MAX));
-        }
-
-        if x.is_none() {
-            return Err(GameError::OutOfBounds);
-        }
-
-        if y_dif.is_negative() {
-            y = self.1.checked_sub(
-                y_dif
-                    .checked_neg()
-                    .unwrap_or(0isize)
-                    .try_into()
-                    .unwrap_or(usize::MIN),
-            );
-        } else {
-            y = self.1.checked_add(y_dif.try_into().unwrap_or(usize::MAX));
-        }
-
-        if y.is_none() {
-            return Err(GameError::OutOfBounds);
-        }
-
-        Ok(Position(x.unwrap(), y.unwrap()))
-    }
-}
+use crate::error::GameError;
+use crate::position::Position;
+use crate::status::Status;
 
 pub struct Game {
-    width: usize,
-    height: usize,
-    mine_positions: HashSet<Position>,
-    open_positions: HashSet<Position>,
-    flag_positions: HashSet<Position>,
-    status: Status,
+    pub width: usize,
+    pub height: usize,
+    pub mine_positions: HashSet<Position>,
+    pub open_positions: HashSet<Position>,
+    pub flag_positions: HashSet<Position>,
+    pub status: Status,
 }
 
 impl Game {
-    fn new(width: usize, height: usize) -> Result<Game, GameError> {
+    pub fn new(width: usize, height: usize) -> Result<Game, GameError> {
         if width == 0 || height == 0 {
             return Err(GameError::ZeroFieldArea);
         }
@@ -122,7 +40,7 @@ impl Game {
         true
     }
 
-    fn mine(&mut self, position: Position) -> Result<(), GameError> {
+    pub fn mine(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::Configuration {
             return Err(GameError::IncorrectStatus(
                 self.status,
@@ -142,7 +60,7 @@ impl Game {
         Ok(())
     }
 
-    fn start(&mut self) -> Result<(), GameError> {
+    pub fn start(&mut self) -> Result<(), GameError> {
         if self.status != Status::Configuration {
             return Err(GameError::IncorrectStatus(
                 self.status,
@@ -154,7 +72,7 @@ impl Game {
         Ok(())
     }
 
-    fn open(&mut self, position: Position) -> Result<(), GameError> {
+    pub fn open(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::InProgress {
             return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
         }
@@ -185,7 +103,7 @@ impl Game {
         Ok(())
     }
 
-    fn flag(&mut self, position: Position) -> Result<(), GameError> {
+    pub fn flag(&mut self, position: Position) -> Result<(), GameError> {
         if self.status != Status::InProgress {
             return Err(GameError::IncorrectStatus(self.status, Status::InProgress));
         }
@@ -240,37 +158,13 @@ impl Game {
                     if self.is_in_bounds(&neighbour) && self.mine_positions.contains(&neighbour) {
                         mine_proximity_counter += 1;
                     }
-                },
+                }
                 // don't expect to happen, dif values are too small
                 Err(_) => (),
             }
-
         }
 
         Ok(mine_proximity_counter)
-    }
-}
-
-#[cfg(test)]
-mod position_get_relative {
-    use super::*;
-
-    #[test]
-    fn get_relative_with_negative() {
-        assert_eq!(Position(2, 2).get_relative(-1, -1), Ok(Position(1, 1)));
-    }
-
-    #[test]
-    fn get_relative_with_positive() {
-        assert_eq!(Position(2, 2).get_relative(1, 1), Ok(Position(3, 3)));
-    }
-
-    #[test]
-    fn get_relative_with_oob_negative() {
-        assert_eq!(
-            Position(2, 2).get_relative(-100, -100),
-            Err(GameError::OutOfBounds)
-        );
     }
 }
 
@@ -580,7 +474,7 @@ mod game_check_proximity {
 
         game.start().expect("game started");
 
-        assert_eq!(game.check_proximity(Position(3,3)), Ok(0));
+        assert_eq!(game.check_proximity(Position(3, 3)), Ok(0));
     }
 
     #[test]
